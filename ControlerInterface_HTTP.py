@@ -8,14 +8,14 @@ WorkMode={
 }
 
 class ControlerInterface_AMQP(object):
-	"""The HTTP Controler interface Instance"""
-	InstConf={}
-	Runtimevar={}
-	CtrlerRuntime={}
-	def __init__(self):
-		super(ControlerInterface_AMQP, self).__init__()
-		
-	def SetConfig(self,key,val):
+    """The HTTP Controler interface Instance"""
+    InstConf={}
+    Runtimevar={}
+    CtrlerRuntime={}
+    def __init__(self):
+        super(ControlerInterface_AMQP, self).__init__()
+        
+    def SetConfig(self,key,val):
         self.InstConf[key]=val
 
     def GetConfig(self,key):
@@ -38,10 +38,10 @@ class ControlerInterface_AMQP(object):
         self.InstConf['HTTP_URL']=''
 
         if Mode == "WorkNode":
-        	pass
+            pass
             
         if Mode == "ControlConsole":
-        	pass
+            pass
 
 
     def ExportConfig(self):

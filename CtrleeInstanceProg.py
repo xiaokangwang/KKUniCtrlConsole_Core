@@ -7,6 +7,6 @@ CtrleeInstanceRequiredArgs={
 'NodeType'}
 
 def check(target):
-	for ReqArg in CtrleeInstanceRequiredArgs:
-		if target.keys.count(ReqArg)!=1:
-			raise Exception("Some of arg is missing")
+    for ReqArg in CtrleeInstanceRequiredArgs:
+        if target.keys.count(ReqArg)!=1:
+            raise Exception("Some of arg is missing")
