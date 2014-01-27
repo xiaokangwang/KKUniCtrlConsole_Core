@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import uuid
 
 WorkMode={
 'WorkNode', #Accetpt Control
@@ -10,7 +10,7 @@ class KKUniCtrlConsole_CtrlerInst(object):
     """The Control Instance of KKUniCtrlConsole."""
 
     InstConf={}
-
+    Runtimevar={}
     def __init__(self):
         super(KKUniCtrlConsole_CtrlerInst, self).__init__()
 
@@ -47,5 +47,6 @@ class KKUniCtrlConsole_CtrlerInst(object):
     def ExportConfig(self):
         return self.InstConf
 
-
+    def InitRuntime(self):
+        self.Runtimevar['uuid']=str(uuid.uuid4())
 
