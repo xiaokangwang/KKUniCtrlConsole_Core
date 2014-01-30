@@ -1,0 +1,3 @@
+[submodule "kecsl"]
+	path = kecsl
+	url = git@github.com:xiaokangwang/KKUniCtrlConsole_KECSL.git
