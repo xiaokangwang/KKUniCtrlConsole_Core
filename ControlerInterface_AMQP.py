@@ -7,6 +7,10 @@ import time
 import os
 import kecsl
 import base64
+import logging
+
+LOGGER = logging.getLogger(__name__)
+
 """ControlerInterface:AMQP Progresser"""
 
 WorkMode={
@@ -42,6 +46,8 @@ class ControlerInterface_AMQP(object):
             self.InstConf={
             "Mode":Mode
             }
+        else:
+            raise Exception('Unknown WorkMode')
 
         self.InstConf['AQMP_URL']=''
         self.InstConf['AQMP_Channel']=''
@@ -58,6 +64,7 @@ class ControlerInterface_AMQP(object):
         return self.InstConf
 
     def InitRuntime(self,CtrlerRuntime):
+        Runtimevar={}
         self.Runtimevar['uuid']=str(uuid.uuid4())
         self.CtrlerRuntime=CtrlerRuntime
         self.Runtimevar['Callbacks']={}
@@ -66,7 +73,7 @@ class ControlerInterface_AMQP(object):
         
 
     def connect(self):
-        self.connection = pika.BlockingConnection(pika.URLParameters(self.InstConf['AQMP_URL']))
+        connection = pika.BlockingConnection(pika.URLParameters(self.InstConf['AQMP_URL']))
         self.Runtimevar['AQMP_connection']=connection
         channel = connection.channel(self.InstConf['AQMP_Channel'])
         self.Runtimevar['AQMP_channel']=channel
@@ -140,7 +147,7 @@ class ControlerInterface_AMQP(object):
 
 
     def WorkNode_makeCtrlConn(self,Req):
-        ctrlqueue=self.Runtimevar['AQMP_channel'].queue_declare(exclusive=True)
+        ctrlqueue=self.Runtimevar['AQMP_channel'].queue_declare(exclusive=True)#Wrong! concurrent poll() invocation
         ctrlqueuename = ctrlqueue.method.queue
         ctrlqueuex={}
         ctrlqueuex['name']=ctrlqueuename
@@ -160,10 +167,10 @@ class ControlerInterface_AMQP(object):
         CtrlResp={}
         CtrlResp['Act']='CtrlResp'
         CtrlResp["Rinterface_uuid"]=Req['CtrlInterface_uuid']
-        CtrlResp["Linterface_uuid"]=Runtimevar['uuid']
-        self.Runtimevar['ctrlqueues'][Req["Node_ListeningQueue"]]={}
-        self.Runtimevar['ctrlqueues'][Req["Rinterface_uuid"]]=Req['CtrlInterface_uuid']
-        queuectrlname=WorkNode_makeCtrlConn(Req)
+        CtrlResp["Linterface_uuid"]=self.Runtimevar['uuid']
+        self.Runtimevar['ctrlqueues'][Req["CtrlInterface_ListeningQueue"]]={}
+        self.Runtimevar['ctrlqueues'][Req["CtrlInterface_ListeningQueue"]]['Rinterface_uuid']=Req['CtrlInterface_uuid']
+        queuectrlname=self.WorkNode_makeCtrlConn(Req)
         CtrlResp["Node_ListeningQueue"]=queuectrlname
         return CtrlResp
         
@@ -171,7 +178,7 @@ class ControlerInterface_AMQP(object):
     
     def WorkNode_wait_onmessage(self,ch, method, properties, body):
         try:
-            Req=json.loads(body)
+            Req=json.loads(body.decode('utf8'))
             channel=self.Runtimevar['AQMP_channel']
             if Req['Act']=="ping":
                 channel.basic_publish(exchange='',
@@ -180,7 +187,7 @@ class ControlerInterface_AMQP(object):
             if Req['Act']=="Ctrl":
                 channel.basic_publish(exchange='',
                     routing_key=Req['CtrlInterface_ListeningQueue'],
-                    body=json.dumps(WorkNode_makeCtrlResp(Req)))
+                    body=json.dumps(self.WorkNode_makeCtrlResp(Req)))
                 pass
         except Exception as e:
             raise e
@@ -192,18 +199,18 @@ class ControlerInterface_AMQP(object):
     def WorkNode_wait(self):
         channel=self.Runtimevar['AQMP_channel']
         ListeningQueue_name = self.Runtimevar['ListeningQueue'].method.queue
-        channel.basic_consume(WorkNode_wait_onmessage,queue=ListeningQueue_name,no_ack=True)
+        channel.basic_consume(self.WorkNode_wait_onmessage,queue=ListeningQueue_name,no_ack=True)
         channel.start_consuming()
 
     def WorkNode_startwait(self):
-        wait_thread=threading.Thread(target=WorkNode_wait,daemon=True)
+        wait_thread=threading.Thread(target=self.WorkNode_wait,daemon=True)
         wait_thread.start()
 
 
     def ControlConsole_makeCtrlRequest(self):
         CtrlReq={}
         #UUIDs
-        CtrlReq['CtrlerInst_uuid']=CtrlerRuntime['uuid']
+        CtrlReq['CtrlerInst_uuid']=self.CtrlerRuntime['uuid']
         CtrlReq['CtrlInterface_uuid']=self.Runtimevar['uuid']
         #Listener
         CtrlReq['CtrlInterface_ListeningQueue']=self.Runtimevar['ListeningQueue'].method.queue
@@ -224,14 +231,14 @@ class ControlerInterface_AMQP(object):
 
 
     def ControlConsole_broadcastCtrlRequest(self):
-        CtrlReqJSON=ControlConsole_makeCtrlRequest()
+        CtrlReqJSON=self.ControlConsole_makeCtrlRequest()
         channel=self.Runtimevar['AQMP_channel']
-        channel.basic_publish(exchange=self.InstConf['AQMP_Exange'],body=CtrlReqJSON)
+        channel.basic_publish(exchange=self.InstConf['AQMP_Exange'],routing_key='',body=CtrlReqJSON)
 
     def ControlConsole_broadcastPingRequest(self):
         PingReqJSON=ControlConsole_makePingRequest()
         channel=self.Runtimevar['AQMP_channel']
-        channel.basic_publish(exchange=self.InstConf['AQMP_Exange'],body=PingReqJSON)
+        channel.basic_publish(exchange=self.InstConf['AQMP_Exange'],routing_key='',body=PingReqJSON)
 
     def ControlConsole_StartEnc(self,comingarg):
         thekecsl=kecsl.KKUniCtrlConsole_KECSLInst()
@@ -264,6 +271,8 @@ class ControlerInterface_AMQP(object):
     def ControlConsole_register(self):
         channel=self.Runtimevar['AQMP_channel']
         ListeningQueue = channel.queue_declare(exclusive=True)
+        self.Runtimevar['ListeningQueue']=ListeningQueue
+        
 
     def ControlConsole_wait_onmessage(self,ch, method, properties, body):
         try:
@@ -295,13 +304,14 @@ class ControlerInterface_AMQP(object):
                 else:
                     self.Runtimevar['Connectedqueue'][properties.reply_to]=None
 
-            if comingarg['Act']='Data':
+            if comingarg['Act']=='Data':
                 data=self.ALL_Unwrapencdata(body)
                 progressneed,recvdata=self.Runtimevar['Connectedqueue'][properties.reply_to]['thekecsl'].OnReceive(data['payload'])
                 conn['lastrecv']=time.time()
                 if progressneed:
                     self.Runtimevar['callback_Onreceive'](recvdata,self.Runtimevar['Connectedqueue'][properties.reply_to]['Rinterface_uuid'])
                 else:
+                    pass
                 
         except Exception as e:
             raise e
@@ -309,25 +319,25 @@ class ControlerInterface_AMQP(object):
             pass
 
     def ControlConsole_wait(self):
-        channel=Runtimevar['AQMP_channel']
-        ListeningQueue_name = Runtimevar['ListeningQueue'].method.queue
-        channel.basic_consume(ControlConsole_wait_onmessage,queue=ListeningQueue_name,no_ack=True)
+        channel=self.Runtimevar['AQMP_channel']
+        ListeningQueue_name = self.Runtimevar['ListeningQueue'].method.queue
+        channel.basic_consume(self.ControlConsole_wait_onmessage,queue=ListeningQueue_name,no_ack=True)
         channel.start_consuming()
 
     def ControlConsole_startwait(self):
-        wait_thread=threading.Thread(target=ControlConsole_wait,daemon=True)
+        wait_thread=threading.Thread(target=self.ControlConsole_wait,daemon=True)
         wait_thread.start()
 
 
 
     def ControlConsole_Run(self):
-        self.Connect()
+        self.connect()
         self.ControlConsole_register()
         self.ControlConsole_startwait()
         self.ControlConsole_broadcastCtrlRequest()
 
     def WorkNode_Run(self):
-        self.Connect()
+        self.connect()
         self.WorkNode_register()
         self.WorkNode_startwait()
 
